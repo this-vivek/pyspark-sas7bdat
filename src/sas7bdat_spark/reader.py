@@ -110,15 +110,16 @@ class SASDataSourceReader(DataSourceReader):
     # ------------------------------------------------------------------ #
     # Execution (runs on executors)
     # ------------------------------------------------------------------ #
-    def read(self, partition: SASPartition) -> Iterator[tuple]:
+    def read(self, partition: InputPartition) -> Iterator[tuple]:
         """Read and yield rows for one partition as Arrow-safe tuples.
 
         Args:
-            partition: The row range to read.
+            partition: The row range to read (always a :class:`SASPartition` at runtime).
 
         Yields:
             Row tuples containing only native Python scalars or ``None``.
         """
+        assert isinstance(partition, SASPartition)
         if partition.row_count <= 0:
             return
 
