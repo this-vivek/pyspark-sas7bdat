@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sas7bdat-spark"
+version = "1.0.0"
+description = "Read SAS .sas7bdat files natively in PySpark via a custom Python DataSource."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Vivek Singh Rawat" }]
+keywords = ["spark", "pyspark", "databricks", "sas", "sas7bdat", "pyreadstat", "datasource"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Database",
+    "Topic :: Scientific/Engineering",
+]
+
+# pyspark is intentionally NOT a hard dependency: on Databricks (and most Spark
+# clusters) it is provided by the runtime. Install it via the [spark] extra for
+# local development.
+dependencies = [
+    "pandas>=1.5",
+    "pyreadstat>=1.2",
+]
+
+[project.optional-dependencies]
+spark = ["pyspark>=3.4"]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov>=4.1",
+    "ruff>=0.4",
+    "mypy>=1.8",
+    "pyspark>=3.4",
+]
+
+[project.urls]
+Homepage = "https://github.com/your-org/pyspark-sas7bdat"
+Issues = "https://github.com/your-org/pyspark-sas7bdat/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+sas7bdat_spark = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
+
+[tool.ruff]
+line-length = 90
+target-version = "py39"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# A pragmatic, widely-used selection: pyflakes, pycodestyle, isort, bugbear,
+# comprehensions, pyupgrade, and naming.
+select = ["E", "F", "I", "B", "C4", "UP", "N", "W"]
+ignore = ["E501"]  # line length handled by formatter
+
+[tool.mypy]
+python_version = "3.9"
+warn_unused_ignores = true
+ignore_missing_imports = true
