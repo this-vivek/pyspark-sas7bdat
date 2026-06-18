@@ -7,7 +7,7 @@ the pandas dtype when a representative sample is available.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pyspark.sql.types import (
     BooleanType,
@@ -33,7 +33,7 @@ except ImportError:  # pragma: no cover
     _HAS_TIMESTAMP_NTZ = False
 
 
-def fmt_base(sas_format: Optional[str]) -> str:
+def fmt_base(sas_format: str | None) -> str:
     """Normalise a raw SAS format string to its base token.
 
     Strips the trailing ``.`` and any width/decimal digits so that variants like
@@ -58,7 +58,7 @@ def fmt_base(sas_format: Optional[str]) -> str:
     return sas_format.upper().strip().rstrip(".").rstrip("0123456789").rstrip(".")
 
 
-def get_meta_value(meta_dict: Dict[str, Any], col_name: str, default: str = "") -> str:
+def get_meta_value(meta_dict: dict[str, Any], col_name: str, default: str = "") -> str:
     """Look up a per-column metadata value, tolerating long-name key mismatches.
 
     Some pyreadstat versions key ``readstat_variable_types`` /
@@ -112,7 +112,7 @@ def sas_to_spark_type(
     *,
     readstat_type: str,
     sas_format: str,
-    pandas_dtype: Optional[str] = None,
+    pandas_dtype: str | None = None,
     use_timestamp_ntz: bool = False,
 ) -> DataType:
     """Infer a Spark :class:`DataType` for a single SAS column.

@@ -26,7 +26,6 @@ sample_rows          Rows to sample for ``infer_integer``. Default ``1000``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
 
 from .constants import DEFAULT_ENCODING, DEFAULT_NUM_PARTITIONS
 from .exceptions import SASOptionError
@@ -36,7 +35,7 @@ _TRUTHY = {"1", "true", "yes", "y", "on"}
 _FALSY = {"0", "false", "no", "n", "off", ""}
 
 
-def _parse_bool(raw: Optional[str], *, key: str, default: bool) -> bool:
+def _parse_bool(raw: str | None, *, key: str, default: bool) -> bool:
     """Parse a Spark option string into a bool, raising on unknown values."""
     if raw is None:
         return default
@@ -52,7 +51,7 @@ def _parse_bool(raw: Optional[str], *, key: str, default: bool) -> bool:
 
 
 def _parse_int(
-    raw: Optional[str], *, key: str, default: int, minimum: Optional[int] = None
+    raw: str | None, *, key: str, default: int, minimum: int | None = None
 ) -> int:
     """Parse a Spark option string into an int, with optional lower bound."""
     if raw is None:
@@ -78,17 +77,17 @@ class SASOptions:
     encoding: str = DEFAULT_ENCODING
     num_partitions: int = DEFAULT_NUM_PARTITIONS
     row_offset: int = 0
-    row_count: Optional[int] = None
-    column_select: Optional[List[str]] = None
+    row_count: int | None = None
+    column_select: list[str] | None = None
     lowercase_columns: bool = False
     timestamp_ntz: bool = False
     infer_integer: bool = False
     sample_rows: int = 1000
     # Preserve the original dict for debugging / forward-compatibility.
-    raw: Dict[str, str] = field(default_factory=dict, repr=False, compare=False)
+    raw: dict[str, str] = field(default_factory=dict, repr=False, compare=False)
 
     @classmethod
-    def from_dict(cls, options: Dict[str, str]) -> "SASOptions":
+    def from_dict(cls, options: dict[str, str]) -> SASOptions:
         """Build, validate, and default a :class:`SASOptions` from Spark options.
 
         Args:
@@ -107,7 +106,7 @@ class SASOptions:
                 ".load('/path/to/file.sas7bdat') or .option('path', ...)."
             )
 
-        column_select: Optional[List[str]] = None
+        column_select: list[str] | None = None
         raw_cols = options.get("column_select")
         if raw_cols:
             column_select = [c.strip() for c in raw_cols.split(",") if c.strip()]

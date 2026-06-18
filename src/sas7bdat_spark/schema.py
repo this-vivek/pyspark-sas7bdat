@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from pyspark.sql.types import StructField, StructType
 
+from ._logging import get_logger
 from .constants import META_SAS_FORMAT, META_SAS_LABEL
 from .io import read_metadata
 from .options import SASOptions
 from .type_mapping import get_meta_value, sas_to_spark_type
-from ._logging import get_logger
 
 _log = get_logger(__name__)
 
@@ -67,7 +65,7 @@ def build_schema(path: str, options: SASOptions) -> StructType:
     for col_name in meta.column_names:
         readstat_type = get_meta_value(meta.readstat_variable_types, col_name)
         sas_format = get_meta_value(meta.original_variable_types, col_name)
-        pandas_dtype: Optional[str] = pandas_dtypes.get(col_name)
+        pandas_dtype: str | None = pandas_dtypes.get(col_name)
 
         spark_type = sas_to_spark_type(
             readstat_type=readstat_type,

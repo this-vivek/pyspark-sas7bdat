@@ -6,7 +6,7 @@ SAS format vocabulary easy to extend in a single, reviewable location.
 
 from __future__ import annotations
 
-from typing import Final, FrozenSet
+from typing import Final
 
 # --------------------------------------------------------------------------- #
 # Data source identity
@@ -44,7 +44,7 @@ META_SAS_LABEL: Final[str] = "sas_label"
 # Width/decimal suffixes are stripped before matching (see ``type_mapping.fmt_base``),
 # so only the base token needs to be listed here.
 
-SAS_DATE_FORMATS: Final[FrozenSet[str]] = frozenset(
+SAS_DATE_FORMATS: Final[frozenset[str]] = frozenset(
     {
         "DATE",
         "DDMMYY",
@@ -63,7 +63,7 @@ SAS_DATE_FORMATS: Final[FrozenSet[str]] = frozenset(
     }
 )
 
-SAS_DATETIME_FORMATS: Final[FrozenSet[str]] = frozenset(
+SAS_DATETIME_FORMATS: Final[frozenset[str]] = frozenset(
     {
         "DATETIME",
         "DATETIME18",
@@ -79,7 +79,7 @@ SAS_DATETIME_FORMATS: Final[FrozenSet[str]] = frozenset(
 
 # Kept separate from DATETIME because TIME values are *seconds since midnight*
 # and need a different coercion path (timedelta), not an epoch interpretation.
-SAS_TIME_FORMATS: Final[FrozenSet[str]] = frozenset(
+SAS_TIME_FORMATS: Final[frozenset[str]] = frozenset(
     {
         "TIME",
         "TOD",

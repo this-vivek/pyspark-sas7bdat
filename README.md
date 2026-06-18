@@ -56,7 +56,7 @@ dbutils.library.restartPython()
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `path` | str | — (required) | Path to the `.sas7bdat` file (`dbfs:` and `/mnt/` are resolved). |
+| `path` | str | — (required) | Path to a `.sas7bdat` file, a directory of `.sas7bdat` files, or a glob pattern (e.g. `/data/*.sas7bdat`). `dbfs:` and `/mnt/` are resolved. |
 | `encoding` | str | `utf-8` | Text encoding for character columns. |
 | `num_partitions` | int | `4` | Target Spark partitions (row ranges). |
 | `row_offset` | int | `0` | Leading rows to skip. |
@@ -120,8 +120,12 @@ mypy src          # type-check
   avoid shifting.
 - **pyreadstat reads locally.** Files must be on a local/FUSE path
   (`/dbfs/...`); `dbfs:` and `/mnt/` URIs are translated automatically.
+- **Multi-file reads.** Pass a directory or glob to `.load()` and every `.sas7bdat`
+  file in the set is read in parallel. Schema is inferred from the first file — all
+  files must share the same schema.
 - **Partitioning** is by row range; every partition re-opens the file with a
-  `row_offset`/`row_limit` window.
+  `row_offset`/`row_limit` window. With *N* files and `num_partitions=4` Spark
+  schedules *N × 4* tasks total, distributed across all available executors.
 
 ## License
 

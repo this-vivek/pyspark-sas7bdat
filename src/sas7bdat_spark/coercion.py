@@ -34,9 +34,9 @@ from pyspark.sql.types import (
     TimestampType,
 )
 
+from ._logging import get_logger
 from .constants import META_SAS_FORMAT, SAS_TIME_FORMATS, TIME_ANCHOR_DATE
 from .type_mapping import fmt_base
-from ._logging import get_logger
 
 _log = get_logger(__name__)
 
@@ -177,7 +177,7 @@ def coerce_dataframe(df_pd: pd.DataFrame, schema: StructType) -> pd.DataFrame:
                 df_pd[col] = (
                     df_pd[col]
                     .astype(str)
-                    .replace({token: None for token in _STRING_NA_TOKENS})
+                    .replace(dict.fromkeys(_STRING_NA_TOKENS))
                 )
 
             elif isinstance(dtype, BooleanType):

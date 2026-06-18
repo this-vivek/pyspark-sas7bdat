@@ -59,5 +59,5 @@ def test_column_select_split_and_trim():
 
 def test_frozen_dataclass_is_immutable():
     opts = SASOptions.from_dict({"path": "/x"})
-    with pytest.raises(Exception):
+    with pytest.raises(AttributeError):
         opts.encoding = "latin-1"  # type: ignore[misc]

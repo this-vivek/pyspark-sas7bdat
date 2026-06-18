@@ -3,34 +3,38 @@
 from __future__ import annotations
 
 import math
-from typing import Iterator, List, Tuple
+from collections.abc import Iterator
 
 from pyspark.sql.datasource import DataSourceReader, InputPartition
-from pyspark.sql.types import StructField, StructType
+from pyspark.sql.types import StructType
 
-from .coercion import coerce_dataframe, sanitize_row
-from .constants import META_SAS_FORMAT
-from .io import read_metadata, read_sas7bdat, resolve_local_path
-from .options import SASOptions
 from ._logging import get_logger
+from .coercion import coerce_dataframe, sanitize_row
+from .io import list_sas_files, read_metadata, read_sas7bdat
+from .options import SASOptions
 
 _log = get_logger(__name__)
 
 
 class SASPartition(InputPartition):
-    """A contiguous row range of the SAS file handled by one Spark task.
+    """A contiguous row range of one SAS file handled by one Spark task.
 
     Attributes:
+        file_path: Resolved local path to the SAS file this partition reads.
         row_offset: Index of the first row (0-based) this partition reads.
         row_count: Number of rows this partition reads.
     """
 
-    def __init__(self, row_offset: int, row_count: int) -> None:
+    def __init__(self, file_path: str, row_offset: int, row_count: int) -> None:
+        self.file_path = file_path
         self.row_offset = row_offset
         self.row_count = row_count
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
-        return f"SASPartition(offset={self.row_offset}, count={self.row_count})"
+        return (
+            f"SASPartition(file={self.file_path!r}, "
+            f"offset={self.row_offset}, count={self.row_count})"
+        )
 
 
 class SASDataSourceReader(DataSourceReader):
@@ -45,60 +49,68 @@ class SASDataSourceReader(DataSourceReader):
         """
         self._schema = schema
         self._options = options
-        self._path = resolve_local_path(options.path)
+        self._files = list_sas_files(options.path)
 
         # Map schema field names back to the original SAS column names so the
         # projection passed to pyreadstat uses names the file actually contains
         # (important when ``lowercase_columns`` is enabled).
-        self._source_names: List[str] = [
+        self._source_names: list[str] = [
             (f.metadata or {}).get("sas_source_name", f.name) for f in schema.fields
         ]
 
     # ------------------------------------------------------------------ #
     # Planning
     # ------------------------------------------------------------------ #
-    def partitions(self) -> List[SASPartition]:
-        """Split the (optionally offset/limited) row range into partitions.
+    def partitions(self) -> list[SASPartition]:
+        """Split every file's row range into partitions, one task per chunk.
+
+        Each file gets up to ``num_partitions`` row-range tasks, so Spark can
+        distribute work across files *and* within each file simultaneously.
 
         Returns:
-            A list of :class:`SASPartition`. Always at least one element so Spark
-            has a task to run even for an empty result.
+            A flat list of :class:`SASPartition` across all files. Always at
+            least one element so Spark has a task to run even for an empty result.
         """
-        meta = read_metadata(self._path, encoding=self._options.encoding)
-        total_rows = int(meta.number_rows)
+        all_partitions: list[SASPartition] = []
 
-        start = self._options.row_offset
-        available = max(0, total_rows - start)
-        if self._options.row_count is not None:
-            available = min(self._options.row_count, available)
+        for file_path in self._files:
+            meta = read_metadata(file_path, encoding=self._options.encoding)
+            total_rows = int(meta.number_rows)
 
-        if available <= 0:
-            _log.info("No rows to read from %s (offset=%s).", self._path, start)
-            return [SASPartition(start, 0)]
+            start = self._options.row_offset
+            available = max(0, total_rows - start)
+            if self._options.row_count is not None:
+                available = min(self._options.row_count, available)
 
-        n_parts = min(self._options.num_partitions, available)
-        chunk = max(1, math.ceil(available / n_parts))
+            if available <= 0:
+                _log.info("No rows to read from %s (offset=%s).", file_path, start)
+                all_partitions.append(SASPartition(file_path, start, 0))
+                continue
 
-        partitions: List[SASPartition] = []
-        offset, remaining = start, available
-        while remaining > 0:
-            count = min(chunk, remaining)
-            partitions.append(SASPartition(offset, count))
-            offset += count
-            remaining -= count
+            n_parts = min(self._options.num_partitions, available)
+            chunk = max(1, math.ceil(available / n_parts))
 
-        _log.debug(
-            "Planned %d partition(s) for %s (%d rows).",
-            len(partitions),
-            self._path,
-            available,
-        )
-        return partitions
+            offset, remaining = start, available
+            while remaining > 0:
+                count = min(chunk, remaining)
+                all_partitions.append(SASPartition(file_path, offset, count))
+                offset += count
+                remaining -= count
+
+            _log.debug(
+                "Planned %d partition(s) for %s (%d rows).",
+                n_parts,
+                file_path,
+                available,
+            )
+
+        _log.debug("Total partitions across %d file(s): %d.", len(self._files), len(all_partitions))
+        return all_partitions
 
     # ------------------------------------------------------------------ #
     # Execution (runs on executors)
     # ------------------------------------------------------------------ #
-    def read(self, partition: SASPartition) -> Iterator[Tuple]:
+    def read(self, partition: SASPartition) -> Iterator[tuple]:
         """Read and yield rows for one partition as Arrow-safe tuples.
 
         Args:
@@ -111,7 +123,7 @@ class SASDataSourceReader(DataSourceReader):
             return
 
         df_pd, _ = read_sas7bdat(
-            self._path,
+            partition.file_path,
             encoding=self._options.encoding,
             row_offset=partition.row_offset,
             row_limit=partition.row_count,

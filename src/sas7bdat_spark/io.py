@@ -9,13 +9,14 @@ This module isolates every direct interaction with pyreadstat so that:
 
 from __future__ import annotations
 
+import glob as _glob
 import inspect
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
+from ._logging import get_logger
 from .constants import DBFS_API_PREFIX, DBFS_LOCAL_PREFIX, DEFAULT_ENCODING
 from .exceptions import MissingDependencyError, SASFileNotFoundError, SASReadError
-from ._logging import get_logger
 
 _log = get_logger(__name__)
 
@@ -67,15 +68,58 @@ def resolve_local_path(path: str) -> str:
     return path
 
 
+def list_sas_files(path: str) -> list[str]:
+    """Return resolved local paths for all .sas7bdat files at *path*.
+
+    Accepts three forms:
+    - A single ``.sas7bdat`` file path.
+    - A directory — all ``*.sas7bdat`` files inside it are returned (sorted).
+    - A glob pattern (contains ``*``, ``?``, or ``[``) — matched files are returned.
+
+    Args:
+        path: The path as provided in the reader options (DBFS URIs are resolved).
+
+    Returns:
+        A non-empty list of resolved local filesystem paths.
+
+    Raises:
+        SASFileNotFoundError: If no matching files are found.
+    """
+    local = resolve_local_path(path)
+
+    if os.path.isdir(local):
+        files = sorted(
+            os.path.join(local, f)
+            for f in os.listdir(local)
+            if f.lower().endswith(".sas7bdat")
+        )
+        if not files:
+            raise SASFileNotFoundError(
+                f"No .sas7bdat files found in directory {local!r}."
+            )
+        return files
+
+    if any(c in local for c in ("*", "?", "[")):
+        files = sorted(_glob.glob(local))
+        if not files:
+            raise SASFileNotFoundError(
+                f"No .sas7bdat files matched glob pattern {local!r}."
+            )
+        return files
+
+    # Single file — existence check deferred to read_metadata for a clear error.
+    return [local]
+
+
 def read_sas7bdat(
     path: str,
     *,
     encoding: str = DEFAULT_ENCODING,
     metadataonly: bool = False,
     row_offset: int = 0,
-    row_limit: Optional[int] = None,
-    usecols: Optional[List[str]] = None,
-) -> Tuple["pd.DataFrame", Any]:
+    row_limit: int | None = None,
+    usecols: list[str] | None = None,
+) -> tuple[pd.DataFrame, Any]:
     """Read a SAS7BDAT file (or just its metadata) into a pandas DataFrame.
 
     Only forwards keyword arguments that the installed pyreadstat actually
@@ -101,7 +145,7 @@ def read_sas7bdat(
     Raises:
         SASReadError: If pyreadstat raises while reading the file.
     """
-    kwargs: Dict[str, Any] = {"encoding": encoding, "metadataonly": metadataonly}
+    kwargs: dict[str, Any] = {"encoding": encoding, "metadataonly": metadataonly}
 
     if not metadataonly:
         if SUPPORTS_ROW_OFFSET and row_offset > 0:

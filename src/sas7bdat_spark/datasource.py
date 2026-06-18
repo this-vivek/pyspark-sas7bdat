@@ -6,12 +6,12 @@ from pyspark.sql import SparkSession
 from pyspark.sql.datasource import DataSource
 from pyspark.sql.types import StructType
 
+from ._logging import get_logger
 from .constants import FORMAT_NAME
-from .io import resolve_local_path
+from .io import list_sas_files
 from .options import SASOptions
 from .reader import SASDataSourceReader
 from .schema import build_schema
-from ._logging import get_logger
 
 _log = get_logger(__name__)
 
@@ -34,10 +34,10 @@ class SASDataSource(DataSource):
         return FORMAT_NAME
 
     def schema(self) -> StructType:
-        """Infer and return the Spark schema for the configured file."""
+        """Infer and return the Spark schema from the first resolved SAS file."""
         options = SASOptions.from_dict(self.options)
-        path = resolve_local_path(options.path)
-        return build_schema(path, options)
+        first_file = list_sas_files(options.path)[0]
+        return build_schema(first_file, options)
 
     def reader(self, schema: StructType) -> SASDataSourceReader:
         """Create the partitioned reader for the (possibly pruned) schema."""
