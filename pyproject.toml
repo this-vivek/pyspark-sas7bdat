@@ -38,11 +38,15 @@ dev = [
     "ruff>=0.4",
     "mypy>=1.8",
     "pyspark>=3.4",
+    "build>=1.0",
+    "twine>=5.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/your-org/pyspark-sas7bdat"
-Issues = "https://github.com/your-org/pyspark-sas7bdat/issues"
+Homepage = "https://github.com/this-vivek/pyspark-sas7bdat"
+Repository = "https://github.com/this-vivek/pyspark-sas7bdat"
+Issues = "https://github.com/this-vivek/pyspark-sas7bdat/issues"
+Changelog = "https://github.com/this-vivek/pyspark-sas7bdat/releases"
 
 [tool.setuptools.packages.find]
 where = ["src"]
