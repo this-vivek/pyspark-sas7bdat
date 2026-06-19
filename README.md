@@ -3,17 +3,26 @@
 Read SAS **`.sas7bdat`** files natively in PySpark through a custom
 [Python DataSource](https://spark.apache.org/docs/latest/api/python/tutorial/sql/python_data_source.html),
 backed by [pyreadstat](https://github.com/Roche/pyreadstat). Built and tested
-for **Databricks (DBR 15.2+) / PySpark 4.0+**.
+for **Databricks (DBR 15.2+) / PySpark 4.0+** on **Python 3.10+**.
 
 ```python
 from sas7bdat_spark import register
 
 register(spark)
+
+# Single file
 df = spark.read.format("sas7bdat").load("/path/to/file.sas7bdat")
+
+# Entire directory — all .sas7bdat files processed in parallel
+df = spark.read.format("sas7bdat").load("/path/to/sas_files/")
+
+# Glob pattern
+df = spark.read.format("sas7bdat").load("/path/to/sas_files/*.sas7bdat")
+
 df.show()
 ```
 
-No JVM library, no intermediate CSV/Parquet export — the file is read directly
+No JVM library, no intermediate CSV/Parquet export — files are read directly
 into a Spark DataFrame with correct SAS date/time/datetime semantics.
 
 ---
@@ -50,17 +59,51 @@ On Databricks:
 dbutils.library.restartPython()
 ```
 
+**Requirements:** Python 3.10+, PySpark 4.0+ / Databricks DBR 15.2+.
+
+---
+
+## Multi-file parallel reads
+
+Pass a directory or glob pattern to `.load()` and every matching `.sas7bdat`
+file is read in parallel across Spark executors. Schema is inferred from the
+first file — all files must share the same schema.
+
+```python
+register(spark)
+
+# All files in a directory
+df = (
+    spark.read.format("sas7bdat")
+    .option("num_partitions", "4")   # partitions per file
+    .load("/mnt/data/sas_exports/")
+)
+
+# Glob — only files matching a pattern
+df = spark.read.format("sas7bdat").load("/mnt/data/sas_exports/claims_*.sas7bdat")
+```
+
+**How the task count works:**
+
+```
+10 files  ×  num_partitions=4  →  40 Spark tasks
+```
+
+Each file is independently split into `num_partitions` row-range chunks.
+Spark schedules all tasks across available executors, so both cross-file and
+within-file parallelism are fully utilised.
+
 ---
 
 ## Options
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `path` | str | — (required) | Path to a `.sas7bdat` file, a directory of `.sas7bdat` files, or a glob pattern (e.g. `/data/*.sas7bdat`). `dbfs:` and `/mnt/` are resolved. |
+| `path` | str | — (required) | Path to a `.sas7bdat` file, a directory of `.sas7bdat` files, or a glob pattern. `dbfs:` and `/mnt/` URIs are resolved automatically. |
 | `encoding` | str | `utf-8` | Text encoding for character columns. |
-| `num_partitions` | int | `4` | Target Spark partitions (row ranges). |
-| `row_offset` | int | `0` | Leading rows to skip. |
-| `row_count` | int | all | Maximum rows to read. |
+| `num_partitions` | int | `4` | Spark partitions **per file** (row-range chunks). |
+| `row_offset` | int | `0` | Leading rows to skip (applied per file). |
+| `row_count` | int | all | Maximum rows to read (applied per file). |
 | `column_select` | csv | all | Project a subset of columns early. |
 | `lowercase_columns` | bool | `false` | Lower-case all schema column names. |
 | `timestamp_ntz` | bool | `false` | Use `TimestampNTZType` (no session-tz shift) for SAS datetimes. |
@@ -73,7 +116,7 @@ df = (
     .option("num_partitions", "8")
     .option("column_select", "id,event_dt,amount")
     .option("timestamp_ntz", "true")
-    .load(path)
+    .load("/mnt/data/sas_exports/")
 )
 ```
 
@@ -90,11 +133,11 @@ src/sas7bdat_spark/
 ├── constants.py       # format vocabularies, defaults, metadata keys
 ├── exceptions.py      # SAS7bdatError hierarchy
 ├── options.py         # typed, validated SASOptions dataclass
-├── io.py              # pyreadstat wrapper + DBFS path resolution
+├── io.py              # pyreadstat wrapper, DBFS path resolution, multi-file glob
 ├── type_mapping.py    # SAS type/format -> Spark DataType
 ├── coercion.py        # Arrow-safe pandas -> Python value coercion
 ├── schema.py          # StructType inference (labels, projection)
-├── reader.py          # SASPartition + SASDataSourceReader
+├── reader.py          # SASPartition (file + row range) + SASDataSourceReader
 ├── datasource.py      # SASDataSource + register()
 └── _logging.py        # NullHandler-based library logging
 ```
@@ -110,22 +153,26 @@ ruff check .      # lint
 mypy src          # type-check
 ```
 
+CI runs the full matrix against Python 3.10, 3.11, and 3.12.
+
 ---
 
 ## Notes & caveats
 
+- **Python version.** Requires Python 3.10+. Python 3.9 is not supported because
+  the upstream `pyreadstat` library requires Python 3.10+ as of its recent releases.
 - **Timezones.** SAS datetimes are UTC-based. With the default `TimestampType`,
   Spark interprets the materialised wall-clock value in the session timezone.
   Set `spark.sql.session.timeZone` to `UTC`, or use `timestamp_ntz=true`, to
   avoid shifting.
 - **pyreadstat reads locally.** Files must be on a local/FUSE path
   (`/dbfs/...`); `dbfs:` and `/mnt/` URIs are translated automatically.
-- **Multi-file reads.** Pass a directory or glob to `.load()` and every `.sas7bdat`
-  file in the set is read in parallel. Schema is inferred from the first file — all
-  files must share the same schema.
+- **Shared schema.** For multi-file reads, schema is inferred from the first
+  file (alphabetically). All files in the set must have identical column names
+  and types — mismatched schemas will cause read failures at the executor.
 - **Partitioning** is by row range; every partition re-opens the file with a
-  `row_offset`/`row_limit` window. With *N* files and `num_partitions=4` Spark
-  schedules *N × 4* tasks total, distributed across all available executors.
+  `row_offset`/`row_limit` window. `row_offset` and `row_count` options apply
+  independently to each file.
 
 ## License
 
